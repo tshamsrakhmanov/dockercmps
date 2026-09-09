@@ -3,45 +3,42 @@ services:
   kafka1:
     image: confluentinc/cp-kafka:latest
     container_name: kafka1
+    hostname: kafka1
     ports:
       - "9092:9092"
+      - "19092:19092"
     environment:
-      CLUSTER_ID: 'kafka-docker-cluster-1'
       KAFKA_NODE_ID: 1
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29092,2@kafka2:29093,3@kafka3:29094'
       KAFKA_PROCESS_ROLES: 'broker,controller'
-
-      # Use hostname for internal communication
-      KAFKA_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:29092'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka1:9092'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_LISTENERS: 'PLAINTEXT://:9092,CONTROLLER://:29092,EXTERNAL://:19092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka1:9092,EXTERNAL://localhost:19092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
       KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
-
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_DEFAULT_REPLICATION_FACTOR: 3
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
       ALLOW_PLAINTEXT_LISTENER: 'yes'
-
-      # Critical: Set hostname
-      KAFKA_ZOOKEEPER_CONNECT: ''  # Not needed for KRaft
+      KAFKA_KRAFT_CLUSTER_ID: 'kafka-docker-cluster-1'
     networks:
       - kafka-net
 
   kafka2:
     image: confluentinc/cp-kafka:latest
     container_name: kafka2
+    hostname: kafka2
     ports:
       - "9093:9093"
+      - "19093:19093"
     environment:
-      CLUSTER_ID: 'kafka-docker-cluster-1'
       KAFKA_NODE_ID: 2
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29092,2@kafka2:29093,3@kafka3:29094'
       KAFKA_PROCESS_ROLES: 'broker,controller'
-      KAFKA_LISTENERS: 'PLAINTEXT://:9093,CONTROLLER://:29093'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka2:9093'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_LISTENERS: 'PLAINTEXT://:9093,CONTROLLER://:29093,EXTERNAL://:19093'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka2:9093,EXTERNAL://localhost:19093'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
       KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
@@ -49,22 +46,24 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
       ALLOW_PLAINTEXT_LISTENER: 'yes'
+      KAFKA_KRAFT_CLUSTER_ID: 'kafka-docker-cluster-1'
     networks:
       - kafka-net
 
   kafka3:
     image: confluentinc/cp-kafka:latest
     container_name: kafka3
+    hostname: kafka3
     ports:
       - "9094:9094"
+      - "19094:19094"
     environment:
-      CLUSTER_ID: 'kafka-docker-cluster-1'
       KAFKA_NODE_ID: 3
       KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka1:29092,2@kafka2:29093,3@kafka3:29094'
       KAFKA_PROCESS_ROLES: 'broker,controller'
-      KAFKA_LISTENERS: 'PLAINTEXT://:9094,CONTROLLER://:29094'
-      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka3:9094'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT'
+      KAFKA_LISTENERS: 'PLAINTEXT://:9094,CONTROLLER://:29094,EXTERNAL://:19094'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka3:9094,EXTERNAL://localhost:19094'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT'
       KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
       KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
@@ -72,8 +71,30 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
       ALLOW_PLAINTEXT_LISTENER: 'yes'
+      KAFKA_KRAFT_CLUSTER_ID: 'kafka-docker-cluster-1'
     networks:
       - kafka-net
+
+  topic-creator:
+    image: confluentinc/cp-kafka:latest
+    depends_on:
+      - kafka1
+      - kafka2
+      - kafka3
+    networks:
+      - kafka-net
+    entrypoint: >
+      bash -c "
+        echo 'Waiting for Kafka cluster...' &&
+        sleep 45 &&
+        echo 'Creating topicIn...' &&
+        kafka-topics --bootstrap-server kafka1:9092 --create --topic topicIn --partitions 3 --replication-factor 2 --if-not-exists &&
+        echo 'Creating topicOut...' &&
+        kafka-topics --bootstrap-server kafka1:9092 --create --topic topicOut --partitions 3 --replication-factor 2 --if-not-exists &&
+        echo 'Topics created! Listing all topics:' &&
+        kafka-topics --bootstrap-server kafka1:9092 --list &&
+        echo 'Done! Exiting...'
+      "
 
 networks:
   kafka-net:
